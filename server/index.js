@@ -189,8 +189,29 @@ function returnPage(fields) {
   const msg = { type: '3DS_CHALLENGE_COMPLETE', jwt, md, allFields: fields };
   // JSON dentro de <script>: escapa "<" para não fechar a tag.
   const json = JSON.stringify(msg).replace(/</g, '\\u003c');
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>3DS</title></head>
-<body style="font-family:sans-serif;margin:16px">Autenticação concluída. Retornando…
+  // Mesmo visual da 3ds.html (branding Autra). Esta página aparece dentro do
+  // iframe do desafio por um instante, até a página pai receber o postMessage.
+  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light">
+<title>Autenticação concluída — Autra</title>
+<link rel="icon" type="image/png" href="/assets/autra-favicon-green.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}html,body{margin:0;overflow-x:hidden}
+body{font-family:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#171717;background:#FAFAFA linear-gradient(180deg,#FDFFF0 0%,#FAFAFA 220px);min-height:100vh;padding:16px;-webkit-font-smoothing:antialiased}
+.page{max-width:440px;margin:0 auto}.header{padding:8px 0 20px}.header img{height:28px;width:auto;display:block}
+.card{background:#fff;border-radius:24px;box-shadow:0 25px 50px -12px rgba(10,10,10,.18);padding:32px 20px;text-align:center}
+.icon{width:64px;height:64px;border-radius:50%;background:#0A0A0A;margin:0 auto 16px;display:flex;align-items:center;justify-content:center}
+.icon svg{width:30px;height:30px}h1{font-size:20px;font-weight:800;margin:0 0 6px;letter-spacing:-.01em}p{color:#525252;font-size:14px;margin:0}
+.spinner{width:28px;height:28px;margin:20px auto 0;border-radius:50%;border:3px solid #EAF9B2;border-top-color:#0A0A0A;animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style></head>
+<body><main class="page"><header class="header"><img src="/assets/logo-autra-dark.png" alt="Autra"></header>
+<div class="card" role="status" aria-live="polite">
+<div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#D7F274" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L19 7"/></svg></div>
+<h1>Autenticação concluída</h1><p>Retornando ao aplicativo…</p><div class="spinner" aria-hidden="true"></div>
+</div></main>
 <script>try{window.parent.postMessage(${json},'*')}catch(e){}</script></body></html>`;
 }
 app.post('/api/3ds/return', (req, res) => res.type('html').send(returnPage(req.body || {})));

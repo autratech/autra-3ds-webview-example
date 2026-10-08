@@ -45,7 +45,8 @@ server/            backend Node.js (Express) — guarda as credenciais, fala com
   index.js         endpoints /api/3ds/setup, /api/3ds/authenticate, /api/3ds/challenge-result, /api/pay, /api/3ds/return
   autra-client.js  OAuth client_credentials com cache + retry em 401/403, envelope de erro do core
 web/               página que roda dentro da WebView (sem framework)
-  3ds.html         formulário de teste + iframes (coleta oculta, desafio visível)
+  3ds.html         página com o branding da Autra: formulário, estados e iframes (coleta oculta, desafio visível)
+  assets/          logo e favicon oficiais da Autra
   3ds.js           orquestra o fluxo e publica eventos para o app via notifyNative()
 shared/
   threeds-core.js  funções puras: interpretMessage, buildThreeDsData, isChallenge, describeIndicators
@@ -70,6 +71,16 @@ npm start
 Para testar no celular com o backend local, exponha a porta 3000 por um túnel
 https (ngrok, cloudflared etc.) e ajuste `PUBLIC_RETURN_URL` no `.env` — o
 `returnUrl` precisa ser alcançável pela internet para o desafio voltar.
+
+## Interface da página (branding)
+
+`web/3ds.html` segue o padrão visual do autra.io: fonte Plus Jakarta Sans (Google
+Fonts), paleta Autra (verde `#D7F274` sobre preto `#0A0A0A`), logo em
+`web/assets/logo-autra-dark.png` e estados claros (formulário → verificando
+dispositivo → autenticação adicional no banco → resultado). Para usar a sua
+marca, troque o logo em `web/assets/` e os tokens `:root` no `<style>` da página;
+o `returnPage()` em `server/index.js` repete o mesmo visual. Os eventos enviados
+ao app ficam no `<details>` "Detalhes técnicos", só para o integrador.
 
 ## Contrato entre a página e o app nativo
 
