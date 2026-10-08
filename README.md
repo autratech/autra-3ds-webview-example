@@ -4,7 +4,7 @@ Exemplo de integração **3-D Secure (3DS 2)** com a API de adquirência da Autr
 rodando **dentro de uma WebView** de app mobile, e de como o app nativo
 (Android/iOS/React Native) interpreta o resultado.
 
-Feito para integradores (ex.: Correios) que querem cobrar cartão de crédito no
+Feito para integradores que querem cobrar cartão de crédito no
 app com autenticação do portador no emissor, sem embutir SDK de 3DS no app.
 
 > Este repositório é um exemplo didático. Não é uma biblioteca suportada nem
@@ -55,6 +55,8 @@ ios/               trechos de referência (WKWebView + WKScriptMessageHandler "A
 test/              node --test
 ```
 
+(`docs/screenshots/` guarda as capturas usadas acima; `.github/` tem CI, Dependabot e CODEOWNERS.)
+
 ## Como rodar
 
 Requisitos: Node.js 18+ e uma credencial de API da Autra (sandbox).
@@ -81,6 +83,16 @@ dispositivo → autenticação adicional no banco → resultado). Para usar a su
 marca, troque o logo em `web/assets/` e os tokens `:root` no `<style>` da página;
 o `returnPage()` em `server/index.js` repete o mesmo visual. Os eventos enviados
 ao app ficam no `<details>` "Detalhes técnicos", só para o integrador.
+
+## Capturas (sandbox, 390 px)
+
+| Formulário | Desafio (3DS 2 step-up) | Aprovado | Recusado |
+|---|---|---|---|
+| ![Formulário de cartão](docs/screenshots/01-formulario.png) | ![Autenticação adicional com a página do emissor dentro do card](docs/screenshots/02-desafio.png) | ![Pagamento aprovado](docs/screenshots/03-aprovado.png) | ![Transação recusada pelo emissor](docs/screenshots/04-recusado.png) |
+
+No sandbox os centavos escolhem o cenário: `,00` frictionless, `,53` desafio, `,51` recusa, `,52` indisponível. A página que aparece dentro do card no desafio é a simulação da Cardinal do sandbox (`sandbox.autra.io/api/threeds/mock`); em produção é a tela do emissor do cartão.
+
+![Página simulada do desafio no sandbox](docs/screenshots/05-pagina-desafio-sandbox.png)
 
 ## Contrato entre a página e o app nativo
 
