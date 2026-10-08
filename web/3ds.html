@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Autra 3DS — exemplo WebView</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; max-width: 520px; }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    label { display: block; font-size: 13px; margin: 10px 0 4px; }
+    input { width: 100%; box-sizing: border-box; padding: 10px; font-size: 16px; border: 1px solid #999; border-radius: 6px; }
+    button { margin-top: 16px; width: 100%; padding: 12px; font-size: 16px; border: 0; border-radius: 6px; background: #1a56db; color: #fff; }
+    button:disabled { opacity: .5; }
+    #status { margin-top: 16px; font-size: 13px; white-space: pre-wrap; font-family: ui-monospace, monospace; }
+    .hint { font-size: 12px; opacity: .7; }
+    /* iframe da coleta de dispositivo: sempre oculto */
+    #ddc-iframe { display: none; width: 0; height: 0; border: 0; }
+    /* iframe do desafio: ocupa a tela toda enquanto o portador autentica (acsWindowSize 05) */
+    #challenge-wrap { display: none; position: fixed; inset: 0; background: #fff; z-index: 10; }
+    #challenge-iframe { width: 100%; height: 100%; border: 0; }
+  </style>
+</head>
+<body>
+  <h1>Pagamento com 3-D Secure</h1>
+  <p class="hint">Exemplo para rodar dentro da WebView do app. Cartão de teste: <code>4176660000000100</code>.
+     No sandbox, valor terminado em <code>.53</code> força o desafio.</p>
+
+  <form id="card-form" autocomplete="off">
+    <label>Número do cartão<input id="number" inputmode="numeric" value="4176660000000100" required></label>
+    <label>Validade (MMAAAA)<input id="exp" inputmode="numeric" value="122030" maxlength="6" required></label>
+    <label>CVV<input id="cvv" inputmode="numeric" value="123" maxlength="4" required></label>
+    <label>Nome no cartão<input id="holder" value="CLIENTE TESTE" required></label>
+    <label>Valor (BRL)<input id="amount" inputmode="decimal" value="12.00" required></label>
+    <button id="pay" type="submit">Pagar</button>
+  </form>
+
+  <div id="status"></div>
+
+  <!-- Iframes-alvo dos forms POST. Cross-origin funciona normalmente na WebView. -->
+  <iframe id="ddc-iframe" name="ddc-iframe" title="coleta de dispositivo"></iframe>
+  <div id="challenge-wrap">
+    <iframe id="challenge-iframe" name="challenge-iframe" title="autenticação do emissor"></iframe>
+  </div>
+
+  <script src="/shared/threeds-core.js"></script>
+  <script src="/3ds.js"></script>
+</body>
+</html>

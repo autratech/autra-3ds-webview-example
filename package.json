@@ -1,0 +1,19 @@
+{
+  "name": "autra-3ds-webview-example",
+  "version": "1.0.0",
+  "description": "Exemplo de integração 3-D Secure (coleta de dispositivo + desafio) com a API de adquirência da Autra em WebView",
+  "private": true,
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
