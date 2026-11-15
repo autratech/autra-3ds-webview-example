@@ -12,12 +12,18 @@
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
+const { rateLimit } = require('express-rate-limit');
 const { AutraClient, AutraError } = require('./autra-client');
 const core = require('../shared/threeds-core');
+const { ReturnStates } = require('./return-state');
+const returnStates = new ReturnStates();
 
 const PORT = Number(process.env.PORT || 3000);
 const DOCUMENT_ID = process.env.AUTRA_DOCUMENT_ID || '';
 const PUBLIC_RETURN_URL = process.env.PUBLIC_RETURN_URL || `http://localhost:${PORT}/api/3ds/return`;
+
+const CHECKOUT_ORIGIN = new URL(process.env.PUBLIC_CHECKOUT_ORIGIN || PUBLIC_RETURN_URL).origin;
+const SANDBOX_RETURN_CALLBACK = process.env.SANDBOX_RETURN_CALLBACK === 'true';
 
 const autra = new AutraClient({
   baseUrl: process.env.AUTRA_BASE_URL || 'https://api.sandbox.autra.io',
@@ -26,7 +32,13 @@ const autra = new AutraClient({
 });
 
 const app = express();
-app.set('trust proxy', true); // para req.ip refletir X-Forwarded-For atrás de proxy/túnel
+// Confiar somente nos proxies configurados evita bypass por X-Forwarded-For.
+app.set('trust proxy', process.env.TRUSTED_PROXY ? process.env.TRUSTED_PROXY.split(',').map((s) => s.trim()) : false);
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, limit: 60, standardHeaders: 'draft-8', legacyHeaders: false,
+  message: { errors: [{ code: 'RATE_LIMITED', msg: 'Aguarde antes de tentar novamente.' }] }
+});
+app.use(['/api/3ds', '/api/pay'], apiLimiter);
 app.use(express.json({ limit: '64kb' }));
 app.use(express.urlencoded({ extended: false })); // a Cardinal faz form POST no returnUrl
 
@@ -83,6 +95,9 @@ app.post('/api/3ds/authenticate', wrap(async (req, res) => {
   const billTo = b.billTo || {};
   const dev = b.deviceInformation || {};
 
+  const callbackState = returnStates.create(b.requestId);
+  const callbackURL = new URL(PUBLIC_RETURN_URL);
+  callbackURL.searchParams.set('state', callbackState);
   const payload = {
     documentId: DOCUMENT_ID,
     transactionalToken: b.transactionalToken,
@@ -122,11 +137,26 @@ app.post('/api/3ds/authenticate', wrap(async (req, res) => {
       httpAcceptContent: dev.httpAcceptContent || req.get('accept') || '*/*',
       ipAddress: clientIp(req) // injetado pelo servidor; a WebView não sabe o próprio IP público
     },
-    returnUrl: PUBLIC_RETURN_URL
+    returnUrl: callbackURL.toString(),
+    ...(SANDBOX_RETURN_CALLBACK ? { sandboxReturnCallback: true } : {})
   };
 
-  const out = await autra.threeDsAuthenticate(payload);
-  res.json(out);
+  try {
+    const out = await autra.threeDsAuthenticate(payload);
+    if (core.isChallenge(out)) {
+      returnStates.bind(callbackState, out.authenticationId);
+      const stepUp = new URL(out.stepUpUrl);
+      const legacyMock = stepUp.origin === 'https://sandbox.autra.io' && stepUp.pathname === '/api/threeds/mock' && stepUp.searchParams.get('mode') === 'challenge';
+      if (legacyMock) returnStates.discard(callbackState);
+      res.json({ ...out, callbackState: legacyMock ? null : callbackState, callbackOrigin: legacyMock ? stepUp.origin : callbackURL.origin });
+    } else {
+      returnStates.discard(callbackState);
+      res.json(out);
+    }
+  } catch (err) {
+    returnStates.discard(callbackState);
+    throw err;
+  }
 }));
 
 /**
@@ -183,10 +213,11 @@ app.post('/api/pay', wrap(async (req, res) => {
  * Respondemos um HTML mínimo que avisa a página pai (3ds.html) via postMessage.
  * Em produção esta URL precisa ser https e pública.
  */
-function returnPage(fields) {
+function returnPage(fields, targetOrigin, state) {
+  if (!targetOrigin || new URL(targetOrigin).origin !== targetOrigin) throw new Error('invalid checkout origin');
   const jwt = fields.Response || fields.JWT || fields.jwt || '';
   const md = fields.MD || fields.md || '';
-  const msg = { type: '3DS_CHALLENGE_COMPLETE', jwt, md, allFields: fields };
+  const msg = { type: '3DS_CHALLENGE_COMPLETE', jwt, md, state, allFields: fields };
   // JSON dentro de <script>: escapa "<" para não fechar a tag.
   const json = JSON.stringify(msg).replace(/</g, '\\u003c');
   // Mesmo visual da 3ds.html (branding Autra). Esta página aparece dentro do
@@ -212,10 +243,18 @@ body{font-family:"Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",Roboto,s
 <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#D7F274" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L19 7"/></svg></div>
 <h1>Autenticação concluída</h1><p>Retornando ao aplicativo…</p><div class="spinner" aria-hidden="true"></div>
 </div></main>
-<script>try{window.parent.postMessage(${json},'*')}catch(e){}</script></body></html>`;
+<script>try{window.parent.postMessage(${json},${JSON.stringify(targetOrigin)})}catch(e){}</script></body></html>`;
 }
-app.post('/api/3ds/return', (req, res) => res.type('html').send(returnPage(req.body || {})));
-app.get('/api/3ds/return', (req, res) => res.type('html').send(returnPage(req.query || {})));
+app.post('/api/3ds/return', (req, res) => {
+  res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+  const fields = req.body || {};
+  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  const md = fields.MD || fields.md;
+  if (typeof md !== 'string' || !returnStates.consume(state, md)) return res.status(400).send('Retorno 3DS inválido ou expirado.');
+  res.set('Content-Security-Policy', `frame-ancestors ${CHECKOUT_ORIGIN}`);
+  return res.type('html').send(returnPage(fields, CHECKOUT_ORIGIN, state));
+});
+app.get('/api/3ds/return', (_req, res) => res.set('Allow', 'POST').status(405).end());
 
 app.get('/api/health', (req, res) => res.json({ ok: true, baseUrl: autra.baseUrl, documentId: DOCUMENT_ID }));
 

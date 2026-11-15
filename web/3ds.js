@@ -104,7 +104,7 @@
         return;
       }
       if (window.parent && window.parent !== window) {
-        window.parent.postMessage(msg, '*'); // página embutida em outra página
+        window.parent.postMessage(msg, window.location.origin); // página embutida em outra página
       }
     } catch (e) {
       /* ponte indisponível: ignora */
@@ -154,23 +154,10 @@
    * Espera um `message` cujo `data` satisfaça `predicate`, com timeout.
    * Resolve { data, timedOut }.
    */
-  function waitForMessage(predicate, timeoutMs) {
-    return new Promise(function (resolve) {
-      var timer = setTimeout(function () {
-        window.removeEventListener('message', onMessage);
-        resolve({ data: null, timedOut: true });
-      }, timeoutMs);
-      function onMessage(ev) {
-        var data = ev.data;
-        if (typeof data === 'string') {
-          try { data = JSON.parse(data); } catch (e) { return; }
-        }
-        if (!data || typeof data !== 'object' || !predicate(data)) return;
-        clearTimeout(timer);
-        window.removeEventListener('message', onMessage);
-        resolve({ data: data, timedOut: false });
-      }
-      window.addEventListener('message', onMessage);
+  function waitForMessage(predicate, timeoutMs, expectedOrigin, frameId) {
+    return window.AutraThreeDSMessages.waitForMessage({
+      target: window, predicate: predicate, timeoutMs: timeoutMs,
+      expectedOrigin: expectedOrigin, expectedSource: $(frameId).contentWindow
     });
   }
 
@@ -199,7 +186,7 @@
     notifyNative(EV.SETUP_DONE, { requestId: setup.requestId, referenceId: setup.referenceId });
 
     // (b) coleta de dispositivo: iframe oculto, só o JWT da Cardinal.
-    var ddcWait = waitForMessage(function (d) { return Object.prototype.hasOwnProperty.call(d, 'Status'); }, DDC_TIMEOUT_MS);
+    var ddcWait = waitForMessage(function (d) { return Object.prototype.hasOwnProperty.call(d, 'Status'); }, DDC_TIMEOUT_MS, new URL(setup.deviceDataCollectionUrl).origin, 'ddc-iframe');
     postForm(setup.deviceDataCollectionUrl, 'ddc-iframe', { JWT: setup.accessToken });
     var ddc = await ddcWait; // Cardinal: { MessageType: "profile.completed", SessionId, Status: true }
     notifyNative(EV.DDC_DONE, { timedOut: ddc.timedOut, sessionId: ddc.data ? ddc.data.SessionId : null });
@@ -225,7 +212,10 @@
       notifyNative(EV.CHALLENGE_STARTED, { authenticationId: auth.authenticationId, stepUpUrl: auth.stepUpUrl });
       announce('Autenticação adicional. Confirme no seu banco para concluir o pagamento.');
       setStage('challenge');
-      var challengeWait = waitForMessage(function (d) { return d.type === '3DS_CHALLENGE_COMPLETE'; }, CHALLENGE_TIMEOUT_MS);
+      var challengeWait = waitForMessage(function (d) {
+        return d.type === '3DS_CHALLENGE_COMPLETE' && d.md === auth.authenticationId &&
+          (!auth.callbackState || d.state === auth.callbackState);
+      }, CHALLENGE_TIMEOUT_MS, auth.callbackOrigin, 'challenge-iframe');
       postForm(auth.stepUpUrl, 'challenge-iframe', { JWT: auth.accessToken, MD: auth.authenticationId });
       var ch = await challengeWait;
       setProcessing('Confirmando autenticação…');
