@@ -12,6 +12,7 @@
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
+const { rateLimit } = require('express-rate-limit');
 const { AutraClient, AutraError } = require('./autra-client');
 const core = require('../shared/threeds-core');
 const { ReturnStates } = require('./return-state');
@@ -31,7 +32,13 @@ const autra = new AutraClient({
 });
 
 const app = express();
-app.set('trust proxy', true); // para req.ip refletir X-Forwarded-For atrás de proxy/túnel
+// Confiar somente nos proxies configurados evita bypass por X-Forwarded-For.
+app.set('trust proxy', process.env.TRUSTED_PROXY ? process.env.TRUSTED_PROXY.split(',').map((s) => s.trim()) : false);
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, limit: 60, standardHeaders: 'draft-8', legacyHeaders: false,
+  message: { errors: [{ code: 'RATE_LIMITED', msg: 'Aguarde antes de tentar novamente.' }] }
+});
+app.use(['/api/3ds', '/api/pay'], apiLimiter);
 app.use(express.json({ limit: '64kb' }));
 app.use(express.urlencoded({ extended: false })); // a Cardinal faz form POST no returnUrl
 

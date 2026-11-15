@@ -94,6 +94,12 @@ No sandbox os centavos escolhem o cenário: `,00` frictionless, `,53` desafio, `
 
 ### Callback e validação de origem
 
+As rotas `/api/3ds/*` e `/api/pay` têm limite de 60 chamadas por minuto e IP
+neste exemplo, incluindo callbacks inválidos. O armazenamento é local ao processo.
+`TRUSTED_PROXY` aceita somente os IPs/CIDRs dos proxies conhecidos da implantação;
+vazio ignora `X-Forwarded-For`. Não use confiança irrestrita no proxy. Em ambiente
+distribuído, compartilhe também o armazenamento do rate limit.
+
 O mock legado envia `postMessage` diretamente da origem `https://sandbox.autra.io`;
 ele não executa o POST no `returnUrl`. Para exercitar o callback, a Autra precisa
 primeiro habilitar a origem HTTPS do tenant e a chave de assinatura do simulador.

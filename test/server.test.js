@@ -85,3 +85,18 @@ test('clientIp normaliza loopback IPv6', () => {
   assert.equal(clientIp({ ip: '::ffff:10.0.0.5' }), '10.0.0.5');
   assert.equal(clientIp({ ip: '200.1.2.3' }), '200.1.2.3');
 });
+
+test('rotas 3DS limitam chamadas mesmo com X-Forwarded-For não confiável', async () => {
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  try {
+    let limited = false;
+    for (let i = 0; i < 65; i++) {
+      const response = await fetch(`http://127.0.0.1:${server.address().port}/api/3ds/authenticate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `192.0.2.${i + 1}` }, body: '{}'
+      });
+      if (response.status === 429) { limited = true; break; }
+    }
+    assert.equal(limited, true);
+  } finally { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); }
+});
