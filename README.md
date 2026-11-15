@@ -92,6 +92,34 @@ ao app ficam no `<details>` "Detalhes técnicos", só para o integrador.
 
 No sandbox os centavos escolhem o cenário: `,00` frictionless, `,53` desafio, `,51` recusa, `,52` indisponível. A página que aparece dentro do card no desafio é a simulação da Cardinal do sandbox (`sandbox.autra.io/api/threeds/mock`); em produção é a tela do emissor do cartão.
 
+### Callback e validação de origem
+
+O mock legado envia `postMessage` diretamente da origem `https://sandbox.autra.io`;
+ele não executa o POST no `returnUrl`. Para exercitar o callback, a Autra precisa
+primeiro habilitar a origem HTTPS do tenant e a chave de assinatura do simulador.
+Depois, defina `SANDBOX_RETURN_CALLBACK=true` e `PUBLIC_RETURN_URL` com a URL
+pública HTTPS de `/api/3ds/return`. A aplicação envia `sandboxReturnCallback: true`
+no authenticate; configuração ausente ou origem não autorizada falha fechada.
+O novo desafio retorna via formulário, dentro do iframe, para a URL configurada.
+
+O listener de DDC exige a origem de `deviceDataCollectionUrl` e o iframe de coleta.
+O listener do desafio exige o iframe do desafio, o identificador da autenticação
+e a origem do callback (ou apenas a origem do mock no modo legado). O callback
+recebe um state aleatório, com validade de cinco minutos, associado ao request
+e MD da autenticação; somente um retorno válido pode consumi-lo. O GET do callback
+não conclui autenticação. O retorno não exige Bearer, mas não autoriza pagamento:
+o backend ainda consulta `challenge-result` com suas credenciais antes da venda.
+
+`PUBLIC_CHECKOUT_ORIGIN` define o destinatário exato do `postMessage` do callback;
+quando omitido, usa a origem de `PUBLIC_RETURN_URL`. A ponte genérica para uma
+página pai agora é same-origin; integração em parent de outra origem exige
+configuração explícita no código, nunca `*`. Nenhum token OAuth é enviado ao iframe.
+
+O armazenamento de state deste exemplo é em memória, limitado e single-process.
+Em múltiplas instâncias, substitua-o por armazenamento compartilhado com TTL e
+consumo atômico. O mock legado mantém IDs sintéticos fixos e não comprova proteção
+contra replay nem o caminho de callback; use o modo novo para essa homologação.
+
 ![Página simulada do desafio no sandbox](docs/screenshots/05-pagina-desafio-sandbox.png)
 
 ## Contrato entre a página e o app nativo
@@ -101,7 +129,7 @@ A página chama `notifyNative(event, data)`, que tenta, nesta ordem:
 1. `window.AutraBridge.postMessage(json)` — Android (`addJavascriptInterface(obj, "AutraBridge")`)
 2. `window.webkit.messageHandlers.AutraBridge.postMessage(obj)` — iOS (`WKScriptMessageHandler`)
 3. `window.ReactNativeWebView.postMessage(json)` — React Native WebView
-4. `window.parent.postMessage(obj, '*')` — página embutida em outra página (teste no navegador)
+4. `window.parent.postMessage(obj, window.location.origin)` — página pai da mesma origem (teste no navegador)
 
 Cada mensagem é `{ "event": "<nome>", "data": { ... } }`.
 
